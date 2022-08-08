@@ -19,7 +19,7 @@ package yurt
 import (
 	"time"
 
-	"github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,11 +54,13 @@ func Register() {
 
 		err = ns.DeleteNameSpace(c, YurtE2ENamespaceName)
 		util.ExpectNoError(err)
-
-		ginkgo.By(YurtE2ETestDesc + "yurt_test_create namespace")
-		_, err = ns.CreateNameSpace(c, YurtE2ENamespaceName)
-		gomega.Expect(err).NotTo(gomega.HaveOccurred(), "fail to create namespace")
-
+		util.YurtDescribe(YurtE2ETestDesc+"yurt_test_create namespace", func() {
+			ginkgo.It(YurtE2ETestDesc+"yurt_test_create namespace", func() {
+				ginkgo.By(YurtE2ETestDesc + "yurt_test_create namespace")
+				_, err = ns.CreateNameSpace(c, YurtE2ENamespaceName)
+				gomega.Expect(err).NotTo(gomega.HaveOccurred(), "fail to create namespace")
+			})
+		})
 		util.YurtDescribe(YurtE2ETestDesc+": cluster_info", func() {
 			ginkgo.It(YurtE2ETestDesc+": should get cluster pod num", func() {
 				cs := c
