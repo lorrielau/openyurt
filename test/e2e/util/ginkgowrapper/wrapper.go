@@ -21,12 +21,11 @@ package ginkgowrapper
 import (
 	"bufio"
 	"bytes"
+	"github.com/onsi/ginkgo/v2"
 	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strings"
-
-	"github.com/onsi/ginkgo"
 )
 
 // FailurePanic is the value that will be panicked from Fail.
@@ -36,9 +35,6 @@ type FailurePanic struct {
 	Line           int    // The line number of the filename that is the source of the failure
 	FullStackTrace string // A full stack trace starting at the source of the failure
 }
-
-// String makes FailurePanic look like the old Ginkgo panic when printed.
-func (FailurePanic) String() string { return ginkgo.GINKGO_PANIC }
 
 // Fail wraps ginkgo.Fail so that it panics with more useful
 // information about the failure. This function will panic with a
@@ -69,7 +65,7 @@ func Fail(message string, callerSkip ...int) {
 
 // ginkgo adds a lot of test running infrastructure to the stack, so
 // we filter those out
-var stackSkipPattern = regexp.MustCompile(`onsi/ginkgo`)
+var stackSkipPattern = regexp.MustCompile(`onsi/ginkgo/v2`)
 
 func pruneStack(skip int) string {
 	skip += 2 // one for pruneStack and one for debug.Stack
