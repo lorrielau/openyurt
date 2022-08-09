@@ -59,7 +59,9 @@ func YurtDescribe(text string, body func()) bool {
 
 // WaitForNamespacesDeleted waits for the namespaces to be deleted.
 func WaitForNamespacesDeleted(c clientset.Interface, namespaces []string, timeout time.Duration) error {
-	ginkgo.By("Waiting for namespaces to vanish")
+	ginkgo.It("Wait for namespaces to vanish", func() {
+		ginkgo.By("Waiting for namespaces to vanish")
+	})
 	nsMap := map[string]bool{}
 	for _, ns := range namespaces {
 		nsMap[ns] = true
