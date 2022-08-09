@@ -160,7 +160,7 @@ func Register() {
 		err = ns.DeleteNameSpace(c, YurttunnelE2eNamespaceName)
 		util.ExpectNoError(err)
 
-		ginkgo.By(YurttunnelE2eTestDesc + "yurttunnel_test_create namespace")
+		klog.Infof(YurttunnelE2eTestDesc + "yurttunnel_test_create namespace")
 		_, err = ns.CreateNameSpace(c, YurttunnelE2eNamespaceName)
 		gomega.Expect(err).NotTo(gomega.HaveOccurred(), "fail to create namespace")
 
