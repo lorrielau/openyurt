@@ -21,11 +21,12 @@ package ginkgowrapper
 import (
 	"bufio"
 	"bytes"
-	"github.com/onsi/ginkgo/v2"
 	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strings"
+
+	"github.com/onsi/ginkgo/v2"
 )
 
 // FailurePanic is the value that will be panicked from Fail.
