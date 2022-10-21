@@ -26,6 +26,7 @@ readonly LOCAL_ARCH=$(go env GOHOSTARCH)
 readonly LOCAL_OS=$(go env GOHOSTOS)
 readonly YURT_E2E_TARGETS="test/e2e/yurt-e2e-test"
 readonly EDGE_AUTONOMY_NODES_NUM=3
+cloudNodeContainerName="openyurt-e2e-test-control-plane"
 edgeNodeContainerName="openyurt-e2e-test-worker"
 edgeNodeContainer2Name="openyurt-e2e-test-worker2"
 KUBECONFIG=$HOME/.kube/config
@@ -48,6 +49,30 @@ function set_flags() {
     docker cp $KUBECONFIG $edgeNodeContainerName:/root/.kube/config
 }
 
+# set up flannel
+function setUpFlannel() {
+    local flannelYaml="https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml"
+    local flannelDs="kube-flannel-ds"
+    local flannelNameSpace="kube-flannel"
+    local POD_CREATE_TIMEOUT=120s
+    curl -o ${YURT_ROOT}/flannel.yaml $flannelYaml
+    kubectl apply -f ${YURT_ROOT}/flannel.yaml
+    # check if flannel on every node is ready, if so, "daemon set "kube-flannel-ds" successfully rolled out"
+    kubectl rollout status daemonset kube-flannel-ds -n kube-flannel --timeout=${POD_CREATE_TIMEOUT}
+
+    # set up bridge cni plugins for every node
+    wget -O ${YURT_ROOT}/cni.tgz https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
+
+    docker cp ${YURT_ROOT}/cni.tgz $cloudNodeContainerName:/opt/cni/bin/
+    docker exec -t $cloudNodeContainerName /bin/bash -c 'cd /opt/cni/bin && tar -zxf cni.tgz'
+
+    docker cp ${YURT_ROOT}/cni.tgz $edgeNodeContainerName:/opt/cni/bin/
+    docker exec -t $edgeNodeContainerName /bin/bash -c 'cd /opt/cni/bin && tar -zxf cni.tgz'
+
+    docker cp ${YURT_ROOT}/cni.tgz $edgeNodeContainer2Name:/opt/cni/bin/
+    docker exec -t $edgeNodeContainer2Name /bin/bash -c 'cd /opt/cni/bin && tar -zxf cni.tgz'    
+}
+
 # install gingko
 function getGinkgo() {
     go install github.com/onsi/ginkgo/v2/ginkgo@v2.3.0
@@ -64,13 +89,18 @@ function run_non_edge_autonomy_e2e_tests {
         fi
     # run non-edge-autonomy-e2e-tests
     cd $YURT_ROOT/test/e2e/
-    ginkgo --gcflags "${gcflags:-}" ${goflags} --label-filter='!edge_autonomy' -r
+    ginkgo --gcflags "${gcflags:-}" ${goflags} --label-filter='!edge-autonomy' -r
 }
 
 function run_e2e_edge_autonomy_tests {
-    #run edge-autonomy-e2e-tests
+     # check kubeconfig
+        if [ ! -f "${KUBECONFIG}" ]; then
+            echo "kubeconfig does not exist at ${KUBECONFIG}"
+            exit -1
+        fi
+    # run edge-autonomy-e2e-tests
     cd $YURT_ROOT/test/e2e/
-    ginkgo --gcflags "${gcflags:-}" ${goflags} --label-filter='edge_autonomy' -r
+    ginkgo --gcflags "${gcflags:-}" ${goflags} --label-filter='edge-autonomy' -r 
 }
 
 function cpCodeToEdge {
@@ -80,57 +110,34 @@ function cpCodeToEdge {
 }
 
 function serviceNginx {
-#  run a nginx pod as static pod on each edge node
+#   run a nginx pod as static pod on each edge node
     local nginxYamlPath="${YURT_ROOT}/test/e2e/yamls/nginx.yaml"
     local nginxServiceYamlPath="${YURT_ROOT}/test/e2e/yamls/nginxService.yaml"
     local staticPodPath="/etc/kubernetes/manifests/"
-    local POD_CREATE_TIMEOUT=60s
+    local POD_CREATE_TIMEOUT=240s
 
-# create service for nginx pods
+#   create service for nginx pods
     kubectl apply -f $nginxServiceYamlPath
     docker cp $nginxYamlPath $edgeNodeContainerName:$staticPodPath
-    # docker cp $nginxYamlPath $edgeNodeContainer2Name:$staticPodPath
-#  wait for pod create timeout
-    echo "wait pod create timeout ${edgeNodeContainerName}"
-#  wait confirm that nginx is running
+    docker cp $nginxYamlPath $edgeNodeContainer2Name:$staticPodPath
+#   wait confirm that nginx is running
     kubectl wait --for=condition=Ready pod/yurt-e2e-test-nginx-openyurt-e2e-test-worker --timeout=${POD_CREATE_TIMEOUT}
-    # kubectl wait --for=condition=Ready pod/openyurt-e2e-test-nginx-openyurt-e2e-test-worker2 --timeout=${POD_CREATE_TIMEOUT}
-}
+    kubectl wait --for=condition=Ready pod/yurt-e2e-test-nginx-openyurt-e2e-test-worker2 --timeout=${POD_CREATE_TIMEOUT}
 
-function disconnectCloudNode {
-#  disconnect the cloud node by pull its plug out of the kind net bridge
-    local cloudNodeName="openyurt-e2e-test-control-plane"
-    echo "Disconnecting cloudnode $cloudNodeName"
-    docker network disconnect kind $cloudNodeName
-}
-
-function reconnectCloudNode {
-#  disconnect the cloud node by pull its plug out of the kind net bridge
-    local cloudNodeName="openyurt-e2e-test-control-plane"
-    echo "Reconnecting cloudnode $cloudNodeName"
-    docker network connect kind $cloudNodeName
+#   set up dig in edge node1 
+    docker exec -t $edgeNodeContainerName /bin/bash -c "sed -i -r 's/([a-z]{2}.)?archive.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list"
+    docker exec -t $edgeNodeContainerName /bin/bash -c "sed -i -r 's/security.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list"
+    docker exec -t $edgeNodeContainerName /bin/bash -c "apt-get update && apt-get install dnsutils -y"
 }
 
 GOOS=${LOCAL_OS} GOARCH=${LOCAL_ARCH} set_flags
 
+setUpFlannel
+
 getGinkgo
+
+serviceNginx
 
 run_non_edge_autonomy_e2e_tests
 
-# copy Openyurt and Golang code to edge nodes
-cpCodeToEdge
-
-# install golang to edgenode for further tests run
-docker exec -d $edgeNodeContainerName /bin/bash  "/openyurt/hack/lib/installGolang.sh"
-
-# start busybox and expose it with a service
-serviceNginx
-
-# disconnect cloud node
-disconnectCloudNode
-
-# run edge_autonomy_tests
 run_e2e_edge_autonomy_tests
-
-# reconnect cloud node
-reconnectCloudNode

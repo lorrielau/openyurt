@@ -27,7 +27,7 @@ function installGolangToEdge {
     echo "Begin install golang"
     mkdir -p $goroot
     mkdir -p $gopath
-    wget -O ${goFile} ${golangCodeSource}
+    curl -o ${goFile} ${golangCodeSource}
     tar -zxf ${goFile} -C "/usr/local"
 
 #   set goroot&gopath env
@@ -42,5 +42,10 @@ EOF
 #    set goproxy env
     local goproxy="https://goproxy.cn"
     go env -w GOPROXY=${goproxy},direct
+
+#   set up ginkgo for further tests
+    go install github.com/onsi/ginkgo/v2/ginkgo@v2.3.0
+    go get github.com/onsi/gomega/...
+    go mod tidy
 }
 installGolangToEdge
